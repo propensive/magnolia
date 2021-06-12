@@ -13,6 +13,18 @@ object Macro:
   inline def repeated[T]: List[(String, Boolean)] = ${repeated[T]}
   inline def typeInfo[T]: TypeInfo = ${typeInfo[T]}
   inline def summonOption[T]: Option[T] = ${summonOptionImpl[T]}
+  inline def isProduct[T]: Boolean = ${isProductImpl[T]}
+  inline def isSum[T]: Boolean = ${isSumImpl[T]}
+
+  def isProductImpl[T: Type](using Quotes): Expr[Boolean] =
+    import quotes.reflect.*
+    val typeSymbol = TypeRepr.of[T].typeSymbol
+    Expr(typeSymbol.isClassDef && typeSymbol.flags.is(Flags.Case))
+
+  def isSumImpl[T: Type](using Quotes): Expr[Boolean] =
+    import quotes.reflect.*
+    val typeSymbol = TypeRepr.of[T].typeSymbol
+    Expr(typeSymbol.flags.is(Flags.Sealed))
 
   def summonOptionImpl[T: Type](using Quotes): Expr[Option[T]] =
     Expr.summon[T] match
