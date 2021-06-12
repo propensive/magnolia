@@ -12,7 +12,20 @@ trait MacroDerivation[TypeClass[_]]:
 
   transparent inline def derived[T]: Typeclass[T] =
     if isProduct[T] then
-      val cc = MacroDerivation.getCaseClass[Typeclass, T]
+      val params: List[CaseClass.Param[Typeclass, T]] = MacroDerivation.getParams[Typeclass, T]
+      val cc = new CaseClass[Typeclass, T](
+        typeInfo[T],
+        isObject[T],
+        isValueClass[T],
+        IArray.from(params),
+        IArray(anns[T]*),
+        IArray[Any](typeAnns[T]*)
+      ) {
+        def construct[PType](makeParam: Param => PType)(using ClassTag[PType]): T = ???
+        def rawConstruct(fieldValues: Seq[Any]): T = ???
+        def constructEither[Err, PType: ClassTag](makeParam: Param => Either[Err, PType]): Either[List[Err], T] = ???
+        def constructMonadic[M[_]: Monadic, PType: ClassTag](makeParam: Param => M[PType]): M[T] = ???
+      }
       join(cc)
     else if isSum[T] then
       ???
@@ -23,9 +36,9 @@ end MacroDerivation
 
 object MacroDerivation:
 
-  inline def getCaseClass[Typeclass[_], T]: CaseClass[Typeclass, T] = ${getCaseClassImpl[Typeclass, T]}
+  inline def getParams[Typeclass[_], T]: List[CaseClass.Param[Typeclass, T]] = ${getParamsImpl[Typeclass, T]}
 
-  def getCaseClassImpl[Typeclass[_]: Type, T: Type](using Quotes): Expr[CaseClass[Typeclass, T]] =
+  def getParamsImpl[Typeclass[_]: Type, T: Type](using Quotes): Expr[List[CaseClass.Param[Typeclass, T]]] =
     import quotes.reflect.*
 
     def isRepeated[T](tpeRepr: TypeRepr): Boolean = tpeRepr match
@@ -53,48 +66,40 @@ object MacroDerivation:
     val annotations = paramAnns[T].to(Map)
     val typeAnnotations = paramTypeAnns[T].to(Map)
 
-    val parameters = typeSymbol.caseFields.zipWithIndex.collect {
-      case (paramSymbol: Symbol, idx: Int) =>
-        val valdef: ValDef = paramSymbol.tree.asInstanceOf[ValDef]
-        val paramTypeTree = valdef.tpt
-        Apply(
-          fun = TypeApply(
-            fun = Select(
-              qualifier = paramObj,
-              symbol = paramConstrSymbol
+    def termFromInlinedTypeApplyUnsafe(t: Term): Term = t match
+      case Inlined(_, _, TypeApply(term, _)) => term
+
+    Expr.ofList {
+      typeSymbol.caseFields.zipWithIndex.collect {
+        case (paramSymbol: Symbol, idx: Int) =>
+          val valdef: ValDef = paramSymbol.tree.asInstanceOf[ValDef]
+          val paramTypeTree = valdef.tpt
+          val summonInlineTermNothing = '{scala.compiletime.summonInline}.asTerm
+          val summonInlineTerm = termFromInlinedTypeApplyUnsafe(summonInlineTermNothing)
+          val summonInlineApp = TypeApply(summonInlineTerm, List(paramTypeTree))
+          val callByNeedTerm = '{CallByNeed.apply}.asTerm
+          val instance = Apply(callByNeedTerm, List(summonInlineApp))
+          Apply(
+            fun = TypeApply(
+              fun = Select(
+                qualifier = paramObj,
+                symbol = paramConstrSymbol
+              ),
+              args = List(TypeTree.of[Typeclass], TypeTree.of[T], paramTypeTree)
             ),
-            args = List(TypeTree.of[Typeclass], TypeTree.of[T], paramTypeTree)
-          ),
-          args = List(
-            /*name =*/ Expr(paramSymbol.name).asTerm,
-            /*idx =*/ Expr(idx).asTerm,
-            /*repeated =*/ Expr(isRepeated(paramTypeTree.tpe)).asTerm,
-            /*cbn =*/ '{summonInline[Typeclass[T]]}.asTerm, //TODO CHECK ME
-            /*defaultVal =*/ '{CallByNeed(None)}.asTerm,
-            /*annotations =*/ Expr.ofList(filterAnnotations(paramSymbol.annotations).toSeq.map(_.asExpr)).asTerm,
-            /*typeAnnotations =*/ Expr.ofList(filterAnnotations(getTypeAnnotations(paramTypeTree.tpe)).toSeq.map(_.asExpr)).asTerm
-          )
-        )
+            args = List(
+              /*name =*/ Expr(paramSymbol.name).asTerm,
+              /*idx =*/ Expr(idx).asTerm,
+              /*repeated =*/ Expr(isRepeated(paramTypeTree.tpe)).asTerm,
+              /*cbn =*/ instance, //TODO FIX ME
+              /*defaultVal =*/ '{CallByNeed(None)}.asTerm,
+              /*annotations =*/ Expr.ofList(filterAnnotations(paramSymbol.annotations).toSeq.map(_.asExpr)).asTerm,
+              /*typeAnnotations =*/ Expr.ofList(filterAnnotations(getTypeAnnotations(paramTypeTree.tpe)).toSeq.map(_.asExpr)).asTerm
+            )
+          ).asExprOf[CaseClass.Param[Typeclass, T]]
+      }
     }
 
-    // '{
-    //   new CaseClass[Typeclass, T](
-    //     typeInfo[T],
-    //     isObject[T],
-    //     isValueClass[T],
-    //     IArray.empty,
-    //     IArray(anns[T]*),
-    //     IArray[Any](typeAnns[T]*)
-    //   ) {
-    //     def construct[PType](makeParam: Param => PType)(using ClassTag[PType]): T = ???
-    //     def rawConstruct(fieldValues: Seq[Any]): T = ???
-    //     def constructEither[Err, PType: ClassTag](makeParam: Param => Either[Err, PType]): Either[List[Err], T] = ???
-    //     def constructMonadic[M[_]: Monadic, PType: ClassTag](makeParam: Param => M[PType]): M[T] = ???
-    //   }
-    // }
-
-    ???
-
-  end getCaseClassImpl
+  end getParamsImpl
 
 end MacroDerivation
