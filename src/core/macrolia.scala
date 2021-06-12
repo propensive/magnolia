@@ -18,7 +18,7 @@ trait MacroDerivation[TypeClass[_]]:
         isObject[T],
         isValueClass[T],
         IArray.from(params),
-        IArray(anns[T]*),
+        IArray.from(anns[T]),
         IArray[Any](typeAnns[T]*)
       ) {
         def construct[PType](makeParam: Param => PType)(using ClassTag[PType]): T = ???
@@ -74,11 +74,12 @@ object MacroDerivation:
         case (paramSymbol: Symbol, idx: Int) =>
           val valdef: ValDef = paramSymbol.tree.asInstanceOf[ValDef]
           val paramTypeTree = valdef.tpt
-          val summonInlineTermNothing = '{scala.compiletime.summonInline}.asTerm
-          val summonInlineTerm = termFromInlinedTypeApplyUnsafe(summonInlineTermNothing)
-          val summonInlineApp = TypeApply(summonInlineTerm, List(paramTypeTree))
-          val callByNeedTerm = '{CallByNeed.apply}.asTerm
-          val instance = Apply(callByNeedTerm, List(summonInlineApp))
+          val paramTypeclassTree = Applied(TypeTree.of[Typeclass], List(paramTypeTree))
+          val summonInlineTerm = termFromInlinedTypeApplyUnsafe('{scala.compiletime.summonInline}.asTerm)
+          val summonInlineApp = TypeApply(summonInlineTerm, List(paramTypeclassTree))
+          val callByNeedTerm = '{CaseClass.Param}.asTerm
+          val callByNeedApply = TypeRepr.of[CallByNeed.type].termSymbol.declaredMethod("apply").head
+          val instance = Apply(TypeApply(Select(callByNeedTerm, callByNeedApply), List(paramTypeclassTree)), List(summonInlineApp))
           Apply(
             fun = TypeApply(
               fun = Select(
