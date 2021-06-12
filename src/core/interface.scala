@@ -12,8 +12,8 @@ object CaseClass:
     val label: String,
     val index: Int,
     val repeated: Boolean,
-    val annotations: IArray[Any],
-    val typeAnnotations: IArray[Any]
+    val annotations: List[Any],
+    val typeAnnotations: List[Any]
   ):
     type PType
     
@@ -29,8 +29,8 @@ object CaseClass:
       repeated: Boolean,
       cbn: CallByNeed[Typeclass[P]],
       defaultVal: CallByNeed[Option[P]],
-      annotations: IArray[Any],
-      typeAnnotations: IArray[Any]
+      annotations: List[Any],
+      typeAnnotations: List[Any]
     ): Param[Typeclass, T] =
       new CaseClass.Param[Typeclass, T](name, idx, repeated, annotations, typeAnnotations):
         type PType = P
@@ -45,9 +45,9 @@ abstract class CaseClass[Typeclass[_], Type](
   val typeInfo: TypeInfo,
   val isObject: Boolean,
   val isValueClass: Boolean,
-  val params: IArray[CaseClass.Param[Typeclass, Type]],
-  val annotations: IArray[Any],
-  val typeAnnotations: IArray[Any]
+  val params: List[CaseClass.Param[Typeclass, Type]],
+  val annotations: List[Any],
+  val typeAnnotations: List[Any]
 ) extends Serializable:
 
   type Param = CaseClass.Param[Typeclass, Type]
@@ -64,8 +64,8 @@ abstract class CaseClass[Typeclass[_], Type](
     repeated: Boolean,
     cbn: CallByNeed[Typeclass[P]],
     defaultVal: CallByNeed[Option[P]],
-    annotations: IArray[Any],
-    typeAnnotations: IArray[Any]
+    annotations: List[Any],
+    typeAnnotations: List[Any]
   ): Param =
     new CaseClass.Param[Typeclass, Type](name, idx, repeated, annotations, typeAnnotations):
       type PType = P
@@ -76,14 +76,14 @@ end CaseClass
 
 case class SealedTrait[Typeclass[_], Type](
   typeInfo: TypeInfo,
-  subtypes: IArray[SealedTrait.Subtype[Typeclass, Type, _]],
-  annotations: IArray[Any],
-  typeAnnotations: IArray[Any]
+  subtypes: List[SealedTrait.Subtype[Typeclass, Type, _]],
+  annotations: List[Any],
+  typeAnnotations: List[Any]
 ) extends Serializable:
 
   type Subtype[S] = SealedTrait.SubtypeValue[Typeclass, Type, S]
 
-  override def toString: String = s"SealedTrait($typeInfo, IArray[${subtypes.mkString(",")}])"
+  override def toString: String = s"SealedTrait($typeInfo, List[${subtypes.mkString(",")}])"
 
   def choose[Return](value: Type)(handle: Subtype[_] => Return): Return =
     @tailrec def rec(ix: Int): Return =
@@ -100,8 +100,8 @@ end SealedTrait
 object SealedTrait:
   class Subtype[Typeclass[_], Type, SType](
     val typeInfo: TypeInfo,
-    val annotations: IArray[Any],
-    val typeAnnotations: IArray[Any],
+    val annotations: List[Any],
+    val typeAnnotations: List[Any],
     val isObject: Boolean,
     index: Int,
     callByNeed: CallByNeed[Typeclass[SType]],

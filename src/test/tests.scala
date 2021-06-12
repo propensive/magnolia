@@ -203,7 +203,7 @@ class Tests extends munit.FunSuite {
   test("work in some way") {
     case class ASDF(ghj: String)
     val res = Print.derived[ASDF].print(ASDF("XD"))
-    assertEquals(res, """ASDF(ghj=XD)""")
+    assertEquals(res, """ASDF(XD)""")
   }
 
   // test("construct a Show product instance with alternative apply functions") {

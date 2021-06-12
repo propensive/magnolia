@@ -10,11 +10,11 @@ trait CommonDerivation[TypeClass[_]]:
   def join[T](ctx: CaseClass[Typeclass, T]): Typeclass[T]
 
   inline def derivedMirrorProduct[A](product: Mirror.ProductOf[A]): Typeclass[A] =
-    val parameters = IArray(getParams[A, product.MirroredElemLabels, product.MirroredElemTypes](
+    val parameters = List(getParams[A, product.MirroredElemLabels, product.MirroredElemTypes](
         paramAnns[A].to(Map), paramTypeAnns[A].to(Map), repeated[A].to(Map))*)
     
     val caseClass = new CaseClass[Typeclass, A](typeInfo[A], isObject[A], isValueClass[A], parameters,
-        IArray(anns[A]*), IArray[Any](typeAnns[A]*)):
+        List(anns[A]*), List[Any](typeAnns[A]*)):
       
       def construct[PType](makeParam: Param => PType)(using ClassTag[PType]): A =
         product.fromProduct(Tuple.fromArray(this.params.map(makeParam(_)).to(Array)))
@@ -52,8 +52,8 @@ trait CommonDerivation[TypeClass[_]]:
         val typeclass = CallByNeed(summonInline[Typeclass[p]])
 
         CaseClass.Param[Typeclass, T, p](label, idx, repeated.getOrElse(label, false), typeclass,
-            CallByNeed(None), IArray.from(annotations.getOrElse(label, List())),
-            IArray.from(typeAnnotations.getOrElse(label, List()))) ::
+            CallByNeed(None), List.from(annotations.getOrElse(label, List())),
+            List.from(typeAnnotations.getOrElse(label, List()))) ::
             getParams[T, ltail, ptail](annotations, typeAnnotations, repeated, idx + 1)
 end CommonDerivation
 
@@ -73,13 +73,13 @@ trait Derivation[TypeClass[_]] extends CommonDerivation[TypeClass]:
       case _: EmptyTuple =>
         Nil
       case _: (s *: tail) =>
-        new SealedTrait.Subtype(typeInfo[s], IArray[Any](), IArray.from(paramTypeAnns[T]), isObject[s], idx,
+        new SealedTrait.Subtype(typeInfo[s], List[Any](), List.from(paramTypeAnns[T]), isObject[s], idx,
             CallByNeed(summonOption[Typeclass[s]].getOrElse(derived[s](using summonInline[Mirror.Of[s]]))), x => m.ordinal(x) == idx,
             _.asInstanceOf[s & T]) :: subtypes[T, tail](m, idx + 1)
 
   inline def derivedMirrorSum[A](sum: Mirror.SumOf[A]): Typeclass[A] =
-    val sealedTrait = SealedTrait(typeInfo[A], IArray(subtypes[A, sum.MirroredElemTypes](sum)*),
-        IArray[Any](), IArray(paramTypeAnns[A]*))
+    val sealedTrait = SealedTrait(typeInfo[A], List(subtypes[A, sum.MirroredElemTypes](sum)*),
+        List[Any](), List(paramTypeAnns[A]*))
     
     split(sealedTrait)
 
