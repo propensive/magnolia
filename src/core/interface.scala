@@ -114,6 +114,28 @@ object SealedTrait:
     def apply(t: Type): SType & Type = asType(t)
     override def toString: String = s"Subtype(${typeInfo.full})"
 
+  object Subtype:
+    def apply[Typeclass[_], Type, SType](
+      typeInfo: TypeInfo,
+      annotations: List[Any],
+      typeAnnotations: List[Any],
+      isObject: Boolean,
+      index: Int,
+      callByNeed: CallByNeed[Typeclass[SType]],
+      isType: Type => Boolean,
+      asType: Type => SType & Type
+    ): Subtype[Typeclass, Type, SType] =
+      Subtype[Typeclass, Type, SType](
+        typeInfo,
+        annotations,
+        typeAnnotations,
+        isObject,
+        index,
+        callByNeed,
+        isType,
+        asType
+      )
+
   class SubtypeValue[Typeclass[_], Type, S](val subtype: Subtype[Typeclass, Type, S], v: Type):
     export subtype.{typeclass, typeAnnotations, annotations, cast, typeInfo}
     def value: S & Type = cast(v)

@@ -101,12 +101,11 @@ trait MacroDerivation[TypeClass[_]]:
 
   transparent inline def derived[T]: Typeclass[T] =
     if isProduct[T] then
-      val params: List[CaseClass.Param[Typeclass, T]] = MacroDerivation.getParams[Typeclass, T]
       val cc = new CaseClass[Typeclass, T](
         typeInfo[T],
         isObject[T],
         isValueClass[T],
-        params,
+        MacroDerivation.getParams[Typeclass, T],
         anns[T],
         typeAnns[T]
       ) {
@@ -117,8 +116,16 @@ trait MacroDerivation[TypeClass[_]]:
       }
       join(cc)
     else if isSum[T] then
-      ???
+      val sealedTrait = SealedTrait[Typeclass, T](
+        typeInfo[T],
+        MacroDerivation.getSubtypes[Typeclass, T],
+        List[Any](),
+        paramTypeAnns[T]
+      )
+    
+      split(sealedTrait)
     else
+      // summonInline[Typeclass[T]] // <-- this is tried to be summoned even if not needed
       ???
 
 end MacroDerivation
@@ -126,6 +133,9 @@ end MacroDerivation
 object MacroDerivation:
 
   inline def getParams[Typeclass[_], T]: List[CaseClass.Param[Typeclass, T]] = ${getParamsImpl[Typeclass, T]}
+  inline def getSubtypes[Typeclass[_], T]: List[SealedTrait.Subtype[Typeclass, T, _]] = ${getSubtypesImpl[Typeclass, T]}
+
+  def to[T: Type, R: Type](f: Expr[T] => Expr[R])(using Quotes): Expr[T => R] = '{ (x: T) => ${ f('x) } }
 
   def getParamsImpl[Typeclass[_]: Type, T: Type](using Quotes): Expr[List[CaseClass.Param[Typeclass, T]]] =
     import quotes.reflect.*
@@ -191,5 +201,78 @@ object MacroDerivation:
     }
 
   end getParamsImpl
+
+  def getSubtypesImpl[Typeclass[_]: Type, T: Type](using Quotes): Expr[List[SealedTrait.Subtype[Typeclass, T, _]]] =
+    import quotes.reflect.*
+
+    def isRepeated[T](tpeRepr: TypeRepr): Boolean = tpeRepr match
+      case a: AnnotatedType =>
+        a.annotation.tpe match
+          case tr: TypeRef => tr.name == "Repeated"
+          case _           => false
+      case _ => false
+
+    def getTypeAnnotations(t: TypeRepr): List[Term] = t match
+      case AnnotatedType(inner, ann) => ann :: getTypeAnnotations(inner)
+      case _                         => Nil
+
+    def filterAnnotations(annotations: List[Term]): List[Term] =
+      annotations.filter { a =>
+        a.tpe.typeSymbol.maybeOwner.isNoSymbol ||
+          a.tpe.typeSymbol.owner.fullName != "scala.annotation.internal"
+      }
+
+    def isObject(typeRepr: TypeRepr)(using Quotes): Boolean =
+      typeRepr.typeSymbol.flags.is(Flags.Module)
+
+    def isType(typeRepr: TypeRepr): Expr[T => Boolean] = to { other =>
+      Expr(other.asTerm.tpe == typeRepr)
+    }
+
+    val typeSymbol = TypeRepr.of[T].typeSymbol
+    
+    val subTypeObj = '{SealedTrait.Subtype}.asTerm
+    val subTypeConstrSymbol = TypeRepr.of[SealedTrait.Subtype.type].termSymbol.declaredMethod("apply").head
+
+    val annotations = paramAnns[T].to(Map)
+    val typeAnnotations = paramTypeAnns[T].to(Map)
+
+    def termFromInlinedTypeApplyUnsafe(t: Term): Term = t match
+      case Inlined(_, _, TypeApply(term, _)) => term
+
+    Expr.ofList {
+      typeSymbol.children.zipWithIndex.collect {
+        case (paramSymbol: Symbol, idx: Int) =>
+          val valdef: ValDef = paramSymbol.tree.asInstanceOf[ValDef]
+          val subTypeTypeTree = valdef.tpt
+          val subTypeTypeclassTree = Applied(TypeTree.of[Typeclass], List(subTypeTypeTree))
+          val summonInlineTerm = termFromInlinedTypeApplyUnsafe('{scala.compiletime.summonInline}.asTerm)
+          val summonInlineApp = TypeApply(summonInlineTerm, List(subTypeTypeclassTree))
+          val callByNeedTerm = '{CallByNeed}.asTerm
+          val callByNeedApply = TypeRepr.of[CallByNeed.type].termSymbol.declaredMethod("apply").head
+          val instance = Apply(TypeApply(Select(callByNeedTerm, callByNeedApply), List(subTypeTypeclassTree)), List(summonInlineApp))
+          Apply(
+            fun = TypeApply(
+              fun = Select(
+                qualifier = subTypeObj,
+                symbol = subTypeConstrSymbol
+              ),
+              args = List(TypeTree.of[Typeclass], TypeTree.of[T], subTypeTypeTree)
+            ),
+            args = List(
+              /*name =*/ Expr(paramSymbol.name).asTerm,
+              /*annotations =*/ Expr.ofList(filterAnnotations(paramSymbol.annotations).toSeq.map(_.asExpr)).asTerm,
+              /*typeAnnotations =*/ Expr.ofList(filterAnnotations(getTypeAnnotations(subTypeTypeTree.tpe)).toSeq.map(_.asExpr)).asTerm,
+              /*isObject=*/ Expr(isObject(subTypeTypeTree.tpe)).asTerm,
+              /*idx =*/ Expr(idx).asTerm,
+              /*cbn =*/ instance, //TODO FIX ME
+              /*isType =*/ isType(subTypeTypeTree.tpe).asTerm,
+              /*asType =*/ '{???}.asTerm
+            )
+          ).asExprOf[SealedTrait.Subtype[Typeclass, T, _]]
+      }
+    }
+
+  end getSubtypesImpl
 
 end MacroDerivation
