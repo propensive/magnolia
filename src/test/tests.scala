@@ -206,6 +206,13 @@ class Tests extends munit.FunSuite {
     assertEquals(res, """ASDF(XD)""")
   }
 
+  test("work in some other way") {
+    sealed trait T
+    case class C(s: String) extends T
+    val res = Print.derived[T].print(C("XD"))
+    assertEquals(res, """C(XD)""")
+  }
+
   // test("construct a Show product instance with alternative apply functions") {
   //   val res = Show.derived[TestEntry].show(TestEntry("a", "b"))
   //   assertEquals(res, """TestEntry(param=Param(a=a,b=b))""")

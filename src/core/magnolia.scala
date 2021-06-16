@@ -122,7 +122,6 @@ trait MacroDerivation[TypeClass[_]]:
         List[Any](),
         paramTypeAnns[T]
       )
-    
       split(sealedTrait)
     else
       // summonInline[Typeclass[T]] // <-- this is tried to be summoned even if not needed
@@ -229,8 +228,29 @@ object MacroDerivation:
       Expr(other.asTerm.tpe == typeRepr)
     }
 
+    def typeInfo(typeRepr: TypeRepr): Expr[TypeInfo] =
+      def normalizedName(s: Symbol): String = if s.flags.is(Flags.Module) then s.name.stripSuffix("$") else s.name
+      def name(tpe: TypeRepr) : Expr[String] = Expr(normalizedName(tpe.typeSymbol))
+
+      def ownerNameChain(sym: Symbol): List[String] =
+        if sym.isNoSymbol then List.empty
+        else if sym == defn.EmptyPackageClass then List.empty
+        else if sym == defn.RootPackage then List.empty
+        else if sym == defn.RootClass then List.empty
+        else ownerNameChain(sym.owner) :+ normalizedName(sym)
+
+      def owner(tpe: TypeRepr): Expr[String] = Expr(ownerNameChain(tpe.typeSymbol.maybeOwner).mkString("."))
+
+      def typeInfo(tpe: TypeRepr): Expr[TypeInfo] = tpe match
+        case AppliedType(tpe, args) =>
+          '{TypeInfo(${owner(tpe)}, ${name(tpe)}, ${Expr.ofList(args.map(typeInfo))})}
+        case _ =>
+          '{TypeInfo(${owner(tpe)}, ${name(tpe)}, Nil)}
+
+      typeInfo(typeRepr)
+
     val typeSymbol = TypeRepr.of[T].typeSymbol
-    
+
     val subTypeObj = '{SealedTrait.Subtype}.asTerm
     val subTypeConstrSymbol = TypeRepr.of[SealedTrait.Subtype.type].termSymbol.declaredMethod("apply").head
 
@@ -243,8 +263,8 @@ object MacroDerivation:
     Expr.ofList {
       typeSymbol.children.zipWithIndex.collect {
         case (paramSymbol: Symbol, idx: Int) =>
-          val valdef: ValDef = paramSymbol.tree.asInstanceOf[ValDef]
-          val subTypeTypeTree = valdef.tpt
+          val classDef: ClassDef = paramSymbol.tree.asInstanceOf[ClassDef]
+          val subTypeTypeTree: TypeTree = ??? //TODO TypeTree of classDef
           val subTypeTypeclassTree = Applied(TypeTree.of[Typeclass], List(subTypeTypeTree))
           val summonInlineTerm = termFromInlinedTypeApplyUnsafe('{scala.compiletime.summonInline}.asTerm)
           val summonInlineApp = TypeApply(summonInlineTerm, List(subTypeTypeclassTree))
@@ -260,7 +280,7 @@ object MacroDerivation:
               args = List(TypeTree.of[Typeclass], TypeTree.of[T], subTypeTypeTree)
             ),
             args = List(
-              /*name =*/ Expr(paramSymbol.name).asTerm,
+              /*name =*/ typeInfo(subTypeTypeTree.tpe).asTerm,
               /*annotations =*/ Expr.ofList(filterAnnotations(paramSymbol.annotations).toSeq.map(_.asExpr)).asTerm,
               /*typeAnnotations =*/ Expr.ofList(filterAnnotations(getTypeAnnotations(subTypeTypeTree.tpe)).toSeq.map(_.asExpr)).asTerm,
               /*isObject=*/ Expr(isObject(subTypeTypeTree.tpe)).asTerm,
