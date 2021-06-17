@@ -209,6 +209,7 @@ class Tests extends munit.FunSuite {
   test("work in some other way") {
     sealed trait T
     case class C(s: String) extends T
+    given Print[C] = Print.derived[C]
     val res = Print.derived[T].print(C("XD"))
     assertEquals(res, """C(XD)""")
   }

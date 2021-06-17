@@ -228,6 +228,12 @@ object MacroDerivation:
       Expr(other.asTerm.tpe == typeRepr)
     }
 
+    def asType[S: Type](parent: TypeTree, child: TypeTree): Expr[T => S & T] = to { t =>
+      val resultTypeRepr = AndType(child.tpe, parent.tpe)
+      val resultTypeTree = TypeTree.of(using resultTypeRepr.asType)
+      TypeApply(Select.unique(t.asTerm, "asInstanceOf"), List(resultTypeTree)).asExprOf[S & T]
+    }
+
     def typeInfo(typeRepr: TypeRepr): Expr[TypeInfo] =
       def normalizedName(s: Symbol): String = if s.flags.is(Flags.Module) then s.name.stripSuffix("$") else s.name
       def name(tpe: TypeRepr) : Expr[String] = Expr(normalizedName(tpe.typeSymbol))
@@ -250,6 +256,7 @@ object MacroDerivation:
       typeInfo(typeRepr)
 
     val typeSymbol = TypeRepr.of[T].typeSymbol
+    val parentTypeTree = TypeTree.of[T]
 
     val subTypeObj = '{SealedTrait.Subtype}.asTerm
     val subTypeConstrSymbol = TypeRepr.of[SealedTrait.Subtype.type].termSymbol.declaredMethod("apply").head
@@ -262,9 +269,9 @@ object MacroDerivation:
 
     Expr.ofList {
       typeSymbol.children.zipWithIndex.collect {
-        case (paramSymbol: Symbol, idx: Int) =>
-          val classDef: ClassDef = paramSymbol.tree.asInstanceOf[ClassDef]
-          val subTypeTypeTree: TypeTree = ??? //TODO TypeTree of classDef
+        case (subTypeSymbol: Symbol, idx: Int) =>
+          val classDef: ClassDef = subTypeSymbol.tree.asInstanceOf[ClassDef]
+          val subTypeTypeTree: TypeTree = TypeIdent(subTypeSymbol) //TODO TypeTree of classDef
           val subTypeTypeclassTree = Applied(TypeTree.of[Typeclass], List(subTypeTypeTree))
           val summonInlineTerm = termFromInlinedTypeApplyUnsafe('{scala.compiletime.summonInline}.asTerm)
           val summonInlineApp = TypeApply(summonInlineTerm, List(subTypeTypeclassTree))
@@ -281,13 +288,13 @@ object MacroDerivation:
             ),
             args = List(
               /*name =*/ typeInfo(subTypeTypeTree.tpe).asTerm,
-              /*annotations =*/ Expr.ofList(filterAnnotations(paramSymbol.annotations).toSeq.map(_.asExpr)).asTerm,
+              /*annotations =*/ Expr.ofList(filterAnnotations(subTypeSymbol.annotations).toSeq.map(_.asExpr)).asTerm,
               /*typeAnnotations =*/ Expr.ofList(filterAnnotations(getTypeAnnotations(subTypeTypeTree.tpe)).toSeq.map(_.asExpr)).asTerm,
               /*isObject=*/ Expr(isObject(subTypeTypeTree.tpe)).asTerm,
               /*idx =*/ Expr(idx).asTerm,
               /*cbn =*/ instance, //TODO FIX ME
               /*isType =*/ isType(subTypeTypeTree.tpe).asTerm,
-              /*asType =*/ '{???}.asTerm
+              /*asType =*/ asType(parentTypeTree, subTypeTypeTree).asTerm
             )
           ).asExprOf[SealedTrait.Subtype[Typeclass, T, _]]
       }
