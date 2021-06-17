@@ -213,8 +213,8 @@ object MacroDerivation:
               '{
                 new SealedTrait.Subtype(
                   Macro.typeInfo[s],
-                  List[Any](),
-                  List.from(paramTypeAnns[T]),
+                  Macro.anns[s],
+                  Macro.typeAnns[s],
                   Macro.isObject[s],
                   0 /*FIX ME*/,
                   CallByNeed(summonInline[Typeclass[s]]) /*CHANGE ME*/,
