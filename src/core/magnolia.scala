@@ -134,38 +134,10 @@ object MacroDerivation:
   inline def getParams[Typeclass[_], T]: List[CaseClass.Param[Typeclass, T]] = ${getParamsImpl[Typeclass, T]}
   inline def getSubtypes[Typeclass[_], T]: List[SealedTrait.Subtype[Typeclass, T, _]] = ${getSubtypesImpl[Typeclass, T]}
 
-  def to[T: Type, R: Type](f: Expr[T] => Expr[R])(using Quotes): Expr[T => R] = '{ (x: T) => ${ f('x) } }
-
   def getParamsImpl[Typeclass[_]: Type, T: Type](using Quotes): Expr[List[CaseClass.Param[Typeclass, T]]] =
     import quotes.reflect.*
-
-    def isRepeated[T](tpeRepr: TypeRepr): Boolean = tpeRepr match
-      case a: AnnotatedType =>
-        a.annotation.tpe match
-          case tr: TypeRef => tr.name == "Repeated"
-          case _           => false
-      case _ => false
-
-    def getTypeAnnotations(t: TypeRepr): List[Term] = t match
-      case AnnotatedType(inner, ann) => ann :: getTypeAnnotations(inner)
-      case _                         => Nil
-
-    def filterAnnotations(annotations: List[Term]): List[Term] =
-      annotations.filter { a =>
-        a.tpe.typeSymbol.maybeOwner.isNoSymbol ||
-          a.tpe.typeSymbol.owner.fullName != "scala.annotation.internal"
-      }
-
+    
     val typeSymbol = TypeRepr.of[T].typeSymbol
-
-    val paramObj = '{CaseClass.Param}.asTerm
-    val paramConstrSymbol = TypeRepr.of[CaseClass.Param.type].termSymbol.declaredMethod("apply").head
-
-    val annotations = paramAnns[T].to(Map)
-    val typeAnnotations = paramTypeAnns[T].to(Map)
-
-    def termFromInlinedTypeApplyUnsafe(t: Term): Term = t match
-      case Inlined(_, _, TypeApply(term, _)) => term
 
     Expr.ofList {
       typeSymbol.caseFields.zipWithIndex.collect {
@@ -176,9 +148,9 @@ object MacroDerivation:
             case '[p] =>
               '{
                 CaseClass.Param[Typeclass, T, p](
-                  "${Expr(paramSymbol.name)}",
-                  0 /*Fix me*/,
-                  false /*Fix me*/,
+                  "${Expr(paramSymbol.name)}" /*FIX ME*/,
+                  0 /*FIX ME*/,
+                  false /*FIX ME*/,
                   CallByNeed(summonInline[Typeclass[p]]),
                   CallByNeed(None),
                   List.empty,
@@ -208,7 +180,7 @@ object MacroDerivation:
                   List.from(paramTypeAnns[T]),
                   Macro.isObject[s],
                   0 /*FIX ME*/,
-                  CallByNeed(summonInline[Typeclass[s]]),
+                  CallByNeed(summonInline[Typeclass[s]]) /*CHANGE ME*/,
                   x => x.isInstanceOf[s & T],
                   _.asInstanceOf[s & T])
               }
