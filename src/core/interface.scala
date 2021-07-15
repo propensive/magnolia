@@ -85,10 +85,10 @@ object SealedTrait:
                 val annotations: IArray[Any],
                 val typeAnnotations: IArray[Any],
                 val isObject: Boolean,
-                index: Int,
-                callByNeed: CallByNeed[Typeclass[SType]],
-                isType: Type => Boolean,
-                asType: Type => SType & Type
+                val index: Int,
+                val callByNeed: CallByNeed[Typeclass[SType]],
+                val isType: Type => Boolean,
+                val asType: Type => SType & Type
                ) extends PartialFunction[Type, SType & Type], Serializable:
     def typeclass: Typeclass[SType & Type] = callByNeed.value.asInstanceOf[Typeclass[SType & Type]]
     def cast: PartialFunction[Type, SType & Type] = this
